@@ -1,0 +1,26 @@
+# Ignorar arquivos e pastas temporários do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorar ambiente virtual, se for usado localmente
+.venv/
+env/
+venv/
+
+# Ignorar ficheiros de configuração do Replit
+.replit
+replit.md
+uv.lock
+
+# Dados temporários ou duplicados
+attached_assets/
+dados_corrigido_*.csv
+
+# Ignorar ficheiros de ambiente (caso adiciones variáveis)
+.env
+.env.*
+
+# Git (caso subas de novo sem limpar)
+.git/

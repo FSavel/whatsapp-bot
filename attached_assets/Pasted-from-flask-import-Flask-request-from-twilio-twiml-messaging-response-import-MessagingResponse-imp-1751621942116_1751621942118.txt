@@ -1,0 +1,129 @@
+from flask import Flask, request
+from twilio.twiml.messaging_response import MessagingResponse
+import pandas as pd
+
+app = Flask(__name__)
+
+# Carregar dados do ficheiro corrigido
+df = pd.read_csv("dados_corrigido.csv", encoding="ISO-8859-1")
+df['Numero do trabalhador'] = df['Numero do trabalhador'].astype(str).str.strip()
+
+estado_usuarios = {}
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    incoming_msg = request.values.get("Body", "").strip()
+    user_number = request.values.get("From", "")
+
+    response = MessagingResponse()
+    msg = response.message()
+
+    if user_number not in estado_usuarios:
+        msg.body("Olá, bem vindo à Unitrans Xinavane.\nHello, welcome to Unitrans Xinavane.\n\n1. Português\n2. English")
+        estado_usuarios[user_number] = {"etapa": "escolher_idioma"}
+        return str(response)
+
+    estado = estado_usuarios[user_number]
+
+    # Escolher idioma
+    if estado["etapa"] == "escolher_idioma":
+        if incoming_msg == "1":
+            estado["idioma"] = "pt"
+        elif incoming_msg == "2":
+            estado["idioma"] = "en"
+        else:
+            msg.body("Por favor escolha:\n1. Português\n2. English")
+            return str(response)
+
+        estado["etapa"] = "menu"
+        if estado["idioma"] == "pt":
+            msg.body("Certo, selecione uma das opções abaixo para obter assistência.\n1. Saldo de férias e faltas\n2. Dados Pessoais\n3. Comunicação Interna\n0. Voltar")
+        else:
+            msg.body("Alright, select one of the options below for assistance.\n1. Leave and absences\n2. Personal Data\n3. Internal Communication\n0. Back")
+        return str(response)
+
+    # Menu principal
+    if estado["etapa"] == "menu":
+        if incoming_msg == "0":
+            estado["etapa"] = "escolher_idioma"
+            msg.body("Voltando ao menu inicial...\n\n1. Português\n2. English")
+            return str(response)
+
+        if incoming_msg in ["1", "2", "3"]:
+            estado["opcao"] = incoming_msg
+            estado["etapa"] = "pedir_matricula"
+            if estado["idioma"] == "pt":
+                msg.body("Certo, envie seu número de trabalhador.")
+            else:
+                msg.body("Sure, please send your employee number.")
+            return str(response)
+
+        else:
+            msg.body("Opção inválida. Tente novamente.\n1. Saldo\n2. Dados\n3. Comunicação\n0. Voltar")
+            return str(response)
+
+    # Pedir número de trabalhador
+    if estado["etapa"] == "pedir_matricula":
+        matricula = incoming_msg.strip()
+        resultado = df[df['Numero do trabalhador'] == matricula]
+
+        if resultado.empty:
+            msg.body("Número de trabalhador não encontrado. Verifique e tente novamente.")
+            return str(response)
+
+        trabalhador = resultado.iloc[0]
+        idioma = estado["idioma"]
+        opcao = estado["opcao"]
+
+        if idioma == "pt":
+            if opcao == "1":
+                msg.body(
+                    f"Olá {trabalhador['Nome']} 👋\n"
+                    f"✅ Férias disponíveis: {trabalhador['Ferias']} dias\n"
+                    f"❌ Faltas registradas: {trabalhador['Faltas']} dias\n\n"
+                    "Caro colaborador, Justifique suas faltas em até 3 dias úteis, entregando ao RH os seguintes documentos:\n"
+                    "- Atestado médico, em caso de doença;\n"
+                    "- Certidão de óbito + declaração do bairro;\n"
+                    "- Certidão de casamento, quando aplicável;\n"
+                    "- Outros, conforme orientação do RH.\n\n0. Voltar"
+                )
+            elif opcao == "2":
+                msg.body(
+                    f"🪪 Numero de BI: {trabalhador['Numero de BI']}\n"
+                    f"🚘 Carta de Condução: {trabalhador['Carta de Conducao']}\n"
+                    f"📅 Contrato: {trabalhador['Inicio de Contrato']} até {trabalhador['Fim de contrato']}\n\n"
+                    "Caro colaborador, atualize os seus documentos enviando-os ao departamento de RH.\n\n0. Voltar"
+                )
+            else:
+                msg.body("📢 Caros Gestores de Linha, as folhas de salário (pay slips) já estão disponíveis. Podem levantá-las no departamento de RH.\n\n0. Voltar")
+        else:
+            if opcao == "1":
+                msg.body(
+                    f"Hello {trabalhador['Nome']} 👋\n"
+                    f"✅ Available leave: {trabalhador['Ferias']} days\n"
+                    f"❌ Recorded absences: {trabalhador['Faltas']} days\n\n"
+                    "Dear colleague, please justify your absences within 3 working days by submitting:\n"
+                    "- Medical certificate (if sick);\n"
+                    "- Death certificate + bairro statement (if applicable);\n"
+                    "- Marriage certificate (if applicable);\n"
+                    "- Other documents as required by HR.\n\n0. Back"
+                )
+            elif opcao == "2":
+                msg.body(
+                    f"🪪 ID Number: {trabalhador['Numero de BI']}\n"
+                    f"🚘 Driving License: {trabalhador['Carta de Conducao']}\n"
+                    f"📅 Contract: {trabalhador['Inicio de Contrato']} to {trabalhador['Fim de contrato']}\n\n"
+                    "Dear colleague, please update your documents with the HR department.\n\n0. Back"
+                )
+            else:
+                msg.body("📢 Dear Line Managers, the payslips are now available. Please collect them at the HR department.\n\n0. Back")
+
+        estado["etapa"] = "menu"
+        return str(response)
+
+    # Mensagem fora de contexto
+    msg.body("Desculpe, não entendi. Envie '0' para voltar ao menu.")
+    return str(response)
+
+if __name__ == "__main__":
+    app.run()
